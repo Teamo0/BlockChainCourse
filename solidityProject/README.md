@@ -1,15 +1,12 @@
-# Basic Sample Hardhat Project
+# Blockchain Bootcamp Final Project: decentralised InvestmentFund
 
-This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, a sample script that deploys that contract, and an example of a task implementation, which simply lists the available accounts.
+**Project work in progress**
 
-Try running some of the following tasks:
+Using a typical hardhat folder structure. The main part is the contract dInvestmentFund.sol which allows to deploy a multi-signature wallett, where investors can vote to buy ERC20 tokens and provide liquidity to earn interest.
 
-```shell
-npx hardhat accounts
-npx hardhat compile
-npx hardhat clean
-npx hardhat test
-npx hardhat node
-node scripts/sample-script.js
-npx hardhat help
-```
+script deploy.js deploys the contracts and tests its functions: deposit funds, addCoins, buyCoins and provideLiquidity, cashOutAndDestroy the contract.
+
+folders client and server will allow to access a GUI on localhost.
+
+
+
