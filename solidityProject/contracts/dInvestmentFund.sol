@@ -56,8 +56,6 @@ interface ERC20 {
 
 contract dInvestmentFund {
 
-  constructor() payable{}
-
   event Deposit();
   event Withdraw();
   event CoinAdded();
@@ -67,6 +65,7 @@ contract dInvestmentFund {
   event UpdatedAssetList();
 
 
+  uint public amountBuyIn;
   address private ROUTER_ADDRESS = address(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
   address private FACTORY_ADDRESS = address(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
   address private WETH_ADDRESS = address(0xc778417E063141139Fce010982780140Aa0cD5Ab);
@@ -74,7 +73,7 @@ contract dInvestmentFund {
 
 
   // multi sig code
-  address[] public owners;
+  address payable[] public owners;
   uint256 public required;
   mapping(address => bool) hasPaid;
   mapping(address => bool) isOwner;
@@ -99,16 +98,17 @@ contract dInvestmentFund {
     uint[] _liquidity_coin_assets;
 	}
 
-  //  constructor(address[] memory _owners, uint numberOfConf) payable {
-  //    require(_owners.length > 0, "WAS DU HURNSOHN" );
-  //    require(numberOfConf > 0);
-  //    require(numberOfConf <= _owners.length);
-  //      for(uint i = 0; i < _owners.length; i++){
-  //            owners.push(_owners[i]);
-  //            isOwner[_owners[i]] = true;
-  //        }
-  //        required = numberOfConf;
-  //  }
+  constructor(address payable[] memory _owners, uint numberOfConf, uint _amountBuyIn) payable {
+    require(_owners.length > 0, "No owners input" );
+    require(numberOfConf > 0, "Confirmations must be >0");
+    require(numberOfConf <= _owners.length,"Confirmations must be less or equal to amount of owners");
+    amountBuyIn = _amountBuyIn;
+      for(uint i = 0; i < _owners.length; i++){
+            owners.push(_owners[i]);
+            isOwner[_owners[i]] = true;
+        }
+        required = numberOfConf;
+  }
 
  
 
@@ -127,22 +127,65 @@ contract dInvestmentFund {
      if (numberOfVotes_Buy() == owners.length){
        if(yesVotes_Buy >= required){
           diversifyAndStake();
-       }
+          yesVotes_Buy = 0;
+          for (uint i = 0; i < owners.length; i++){
+          hasVoted_Buy[owners[i]] = false;
+       }}
        else {
           yesVotes_Buy = 0;
           for (uint i = 0; i < owners.length; i++){
             hasVoted_Buy[owners[i]] = false;
           }
        }
-     }
-   }
+   }}
 
 
 
-  function numberOfVotes_Buy() public returns (uint){
+  function numberOfVotes_Buy() public view returns (uint){
     uint counts = 0;
     for (uint i = 0; i < owners.length; i++){
       if(hasVoted_Buy[owners[i]]){
+        counts += 1;
+      }
+    }
+    return counts;
+    }
+
+
+
+  mapping(address => bool) hasVoted_Sell;
+  uint yesVotes_Sell;
+  
+   function voteCashOutAndDestroy(bool vote) public {
+     require(hasVoted_Sell[msg.sender] == false, "You have already voted");
+     require (hasPaid[msg.sender], "You havent paid");
+     
+     hasVoted_Sell[msg.sender] = true;
+     if (vote){
+     yesVotes_Sell += 1;
+     }
+
+     if (numberOfVotes_Sell() == owners.length){
+       if(yesVotes_Sell >= required){
+          cashOutAndDestroy();
+          yesVotes_Sell = 0;
+          for (uint i = 0; i < owners.length; i++){
+          hasVoted_Sell[owners[i]] = false;
+       }}
+       else {
+          yesVotes_Sell = 0;
+          for (uint i = 0; i < owners.length; i++){
+            hasVoted_Sell[owners[i]] = false;
+          }
+       }
+   }}
+
+
+
+  function numberOfVotes_Sell() public view returns (uint){
+    uint counts = 0;
+    for (uint i = 0; i < owners.length; i++){
+      if(hasVoted_Sell[owners[i]]){
         counts += 1;
       }
     }
@@ -164,7 +207,7 @@ contract dInvestmentFund {
     emit CoinAdded();
   }
 
-  function buyCoin(string memory coin_name, uint amountIn) public returns(uint) {
+  function buyCoin(string memory coin_name, uint amountIn) private returns(uint) {
       weth.deposit{value: amountIn}();
       weth.approve(ROUTER_ADDRESS, amountIn);
 
@@ -192,7 +235,7 @@ contract dInvestmentFund {
       return amountsOut[1];
   }
 
-  function sellCoin(string memory coin_name, uint amountIn) public {
+  function sellCoin(string memory coin_name, uint amountIn) private {
     require(amountIn >= balance[coin_name], "You don't own that many tokens");
     ERC20 coin = ERC20(coin_addresses[coin_name]);
  
@@ -222,11 +265,11 @@ contract dInvestmentFund {
   }
 
   
-  function startMiningLiquidity(string memory coin_name) public returns(uint){
+  function startMiningLiquidity(string memory coin_name) private {
     ERC20 coin = ERC20(coin_addresses[coin_name]);
     ERC20 coinPair = ERC20(factory.getPair(coin_addresses[coin_name], WETH_ADDRESS));
 
-    (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast) = coinPair.getReserves();
+    (uint112 reserve0, uint112 reserve1, ) = coinPair.getReserves();
     uint current_coin_balance = balance[coin_name];
     address current_coin_address = coin_addresses[coin_name];
     coin.approve(ROUTER_ADDRESS, current_coin_balance);
@@ -241,7 +284,7 @@ contract dInvestmentFund {
     weth.deposit{value: weth_amount}();
     weth.approve(ROUTER_ADDRESS, weth_amount);
 
-    (uint amountA, uint amountB, uint liquidity) = router.addLiquidity(
+    (, uint amountB, uint liquidity) = router.addLiquidity(
         WETH_ADDRESS,
         current_coin_address,
         weth_amount,
@@ -257,9 +300,11 @@ contract dInvestmentFund {
 
     emit ChangedMiningState();
 
+    
+
   }
 
-  function stopMiningLiquidity(string memory coin_name) public {
+  function stopMiningLiquidity(string memory coin_name) private {
  
     ERC20 coinPair = ERC20(factory.getPair(coin_addresses[coin_name], WETH_ADDRESS));
     coinPair.approve(ROUTER_ADDRESS,liquidity_coin_balance[coin_name]);
@@ -298,7 +343,7 @@ contract dInvestmentFund {
 
 
 
-  function diversifyAndStake() public {
+  function diversifyAndStake() private {
     uint eth_to_spend = address(this).balance - (1 ether / 100);
     uint eth_per_coin = eth_to_spend / coin_names.length / 2;
     for (uint i = 0; i < coin_names.length; i++){
@@ -310,8 +355,7 @@ contract dInvestmentFund {
   }
 
   
-  function cashOutAndDestroy() public { 
-    require(msg.sender == owners[0], 'Only the OG deployer can call this function');
+  function cashOutAndDestroy() private { 
     for (uint i = 0; i < coin_names.length; i++){
       if (liquidity_coin_balance[coin_names[i]] > 0){
         string memory coinname = coin_names[i];
@@ -325,13 +369,19 @@ contract dInvestmentFund {
       }
     }
     emit CashedOutAndDestroyed();
-    selfdestruct(payable(owners[0])); 
+    
+    uint ETH_per_person = address(this).balance /owners.length;
+
+    for (uint i = 0; i < owners.length; i++){
+      owners[i].transfer(ETH_per_person);
+    }
+    selfdestruct(owners[0]); 
  }
 
 
  function buyIn() public payable{
     require(isOwner[msg.sender] == true, "You are not on the owner list!");
-    require(msg.value >= 0.02 ether, "You haven't sent enough funds!");
+    require(msg.value == amountBuyIn, "You have to send exactly the buyIn price!");
     require(hasPaid[msg.sender] == false, "You paid already!");
     hasPaid[msg.sender] = true;
 
@@ -341,3 +391,4 @@ contract dInvestmentFund {
   receive() external payable {}
 
 }
+
