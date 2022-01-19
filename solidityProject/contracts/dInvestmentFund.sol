@@ -63,6 +63,8 @@ contract dInvestmentFund {
   event InvestedAll();
   event CashedOutAndDestroyed();
   event UpdatedAssetList();
+  event VoteRejected();
+  event VoteAccepted();
 
 
   uint public amountBuyIn;
@@ -130,11 +132,13 @@ contract dInvestmentFund {
           yesVotes_Buy = 0;
           for (uint i = 0; i < owners.length; i++){
           hasVoted_Buy[owners[i]] = false;
+          emit VoteAccepted();
        }}
        else {
           yesVotes_Buy = 0;
           for (uint i = 0; i < owners.length; i++){
             hasVoted_Buy[owners[i]] = false;
+          emit VoteRejected();
           }
        }
    }}
